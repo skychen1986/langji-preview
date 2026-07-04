@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>朗迹 · 登录</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="login-container">
+  <div class="login-card">
+    <img src="langji-wave.png" style="width:100px;display:block;margin:0 auto 16px;filter:drop-shadow(0 4px 12px rgba(124,58,237,0.3));" alt="朗迹">
+    <h2>朗迹AI展示系统</h2>
+    <p class="subtitle">工厂管理后台</p>
+    <form id="loginForm" onsubmit="return doLogin()">
+      <div class="form-group">
+        <label>账号</label>
+        <input type="text" id="username" placeholder="请输入账号" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="password" placeholder="请输入密码">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px;">登录</button>
+    </form>
+    <div id="loginError" style="color:#f87171;font-size:12px;text-align:center;margin-top:12px;display:none;"></div>
+    <div class="login-footer">
+      <a href="free.html">先看看免费体验 →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// 已登录直接跳转
+if (localStorage.getItem('langji_auth')) { location.href = 'dashboard.html'; }
+
+function doLogin() {
+  var u = document.getElementById('username').value.trim();
+  var p = document.getElementById('password').value;
+  var err = document.getElementById('loginError');
+
+  if (!u || !p) { err.textContent = '请输入账号和密码'; err.style.display = 'block'; return false; }
+
+  if (u === 'admin' && p === '12345') {
+    localStorage.setItem('langji_auth', Date.now().toString());
+    location.href = 'dashboard.html';
+    return false;
+  }
+
+  err.textContent = '账号或密码错误';
+  err.style.display = 'block';
+  return false;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>朗迹 · 工厂管理</title>
+<link rel="stylesheet" href="css/app.css">
+<style>
+.upload-progress { background: #13132a; border-radius: 8px; padding: 12px 16px; margin: 12px 0; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.upload-progress .file-name { flex: 1; color: #ccc; }
+.upload-progress .status { color: #a78bfa; font-size: 11px; }
+.upload-progress .status.success { color: #34d399; }
+.upload-progress .status.warn { color: #fbbf24; }
+.empty-state { grid-column: 1/-1; text-align: center; padding: 40px 20px; color: #555; }
+</style>
+</head>
+<body style="display:block;overflow:auto;">
+<div class="topbar">
+  <span class="topbar-title">🏭 工厂管理后台</span>
+  <span>
+    <a href="preview.html" class="btn btn-primary" style="padding:4px 12px;font-size:11px;text-decoration:none;">📱 场景预览</a>
+    <button id="btnLogout" class="btn btn-secondary" style="padding:4px 12px;font-size:11px;width:auto;flex:none;margin-left:6px;">退出</button>
+  </span>
+</div>
+
+<div class="dashboard">
+  <h2>产品管理</h2>
+
+  <div class="upload-zone" id="uploadZone">
+    <img src="langji-point.png" class="langji-dash" alt="上传">
+    <div style="color:#ccc;">点击或拖拽上传产品照片</div>
+    <div style="font-size:11px;color:#555;margin-top:4px;" id="quotaHint">AI抠图剩余：<strong id="quotaCount">-</strong> 次</div>
+    <input type="file" id="productUpload" accept="image/*" multiple style="display:none">
+  </div>
+
+  <!-- 抠图选择弹窗 -->
+  <div id="cutoutDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+    <div style="background:#13132a;border:1px solid #333;border-radius:12px;padding:24px;max-width:340px;width:90%;text-align:center;">
+      <div style="font-size:14px;color:#ccc;margin-bottom:4px;" id="dialogFileName"></div>
+      <div style="font-size:11px;color:#666;margin-bottom:16px;">上传方式</div>
+      <button class="btn btn-primary" onclick="chooseUpload('cutout')" style="width:100%;margin-bottom:8px;padding:12px;">✂️ AI抠图上传（去背景）</button>
+      <button class="btn btn-secondary" onclick="chooseUpload('direct')" style="width:100%;padding:12px;">📷 保留原图直接上传</button>
+      <div style="font-size:10px;color:#555;margin-top:8px;cursor:pointer;" onclick="cancelUpload()">取消</div>
+    </div>
+  </div>
+
+  <!-- Key 设置弹窗（首次使用） -->
+  <div id="keyDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:110;align-items:center;justify-content:center;">
+    <div style="background:#13132a;border:1px solid #333;border-radius:12px;padding:24px;max-width:380px;width:90%;text-align:center;">
+      <div style="font-size:16px;color:#fbbf24;margin-bottom:4px;">⚙️ 首次配置</div>
+      <div style="font-size:12px;color:#666;margin-bottom:16px;">AI抠图需要 remove.bg API Key<br>去 <b>remove.bg</b> 注册即可免费获取（每月50张）</div>
+      <input type="password" id="keyInput" placeholder="粘贴 remove.bg API Key" style="width:100%;padding:10px;background:#0a0a14;border:1px solid #333;border-radius:8px;color:#fff;font-size:13px;margin-bottom:12px;">
+      <button class="btn btn-primary" onclick="saveKey()" style="width:100%;padding:12px;">保存并开始使用</button>
+      <div style="font-size:10px;color:#555;margin-top:8px;">Key 只存在你的浏览器 localStorage 中<br>不会上传到任何服务器</div>
+    </div>
+  </div>
+
+  <div id="processingList"></div>
+
+  <div class="product-grid" id="productGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">
+    <div class="empty-state">
+      <img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹">
+      <div>还没有产品，上传第一张照片开始</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/cutout.js"></script>
+<script src="js/effects.js"></script>
+<script>
+// ===== 登录校验 =====
+if (!localStorage.getItem('langji_auth')) { location.href = 'login.html'; }
+
+// API Key 只从 localStorage 读取，源代码零硬编码
+window.REMOVEBG_API_KEY = localStorage.getItem('LANJI_RMBG_KEY') || '';
+
+const STORAGE_KEY = 'langji_factory_products';
+const CACHE_KEY = 'langji_cutout_cache';
+
+// ===== 存储：纯 localStorage base64 =====
+function loadProducts() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { return []; }
+}
+function saveProducts(list) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch(e) {
+    alert('存储空间不足！请删除一些产品后重试。');
+  }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlob(b64) {
+  const parts = b64.split(',');
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const bytes = atob(parts[1]);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+function getCachedCutout(fileName) {
+  try { const cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; return cache[fileName] || null; } catch(e) { return null; }
+}
+function setCachedCutout(fileName, base64) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+    cache[fileName] = base64;
+    const keys = Object.keys(cache);
+    if (keys.length > 20) delete cache[keys[0]];
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  } catch(e) {}
+}
+
+function renderGrid() {
+  const products = loadProducts();
+  const grid = document.getElementById('productGrid');
+  if (products.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>还没有产品，上传第一张照片开始</div></div>';
+    return;
+  }
+  const rows = products.map(p =>
+    '<div class="product-card">'
+    + '<img src="' + (p.image || '') + '" alt="' + p.name + '" loading="lazy" style="width:100%;height:100px;object-fit:contain;border-radius:4px;">'
+    + '<div class="name">' + p.name + (p.cutout ? ' ✂' : '') + '</div>'
+    + '<div style="margin-top:4px;"><button onclick="confirmDelete(\'' + p.id + '\')" style="background:#3a1520;color:#f87171;border:none;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">删除</button></div>'
+    + '</div>'
+  );
+  grid.innerHTML = rows.join('');
+}
+
+function confirmDelete(pid) {
+  if (!confirm('确定删除？')) return;
+  saveProducts(loadProducts().filter(p => p.id !== pid));
+  renderGrid();
+}
+
+async function addProduct(name, blob, cutout) {
+  const id = 'prod-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+  const base64 = await blobToBase64(blob);
+  const products = loadProducts();
+  products.push({ id: id, name: name, cutout: cutout, time: Date.now(), image: base64 });
+  saveProducts(products);
+  renderGrid();
+  return id;
+}
+
+// ===== 上传交互 =====
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('productUpload');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+});
+
+// ===== 抠图额度 =====
+const QUOTA_KEY = 'langji_cutout_quota';
+function getQuota() { return parseInt(localStorage.getItem(QUOTA_KEY)) || 0; }
+function setQuota(n) { localStorage.setItem(QUOTA_KEY, n); updateQuotaUI(); }
+function updateQuotaUI() { document.getElementById('quotaCount').textContent = getQuota(); }
+if (!localStorage.getItem(QUOTA_KEY)) setQuota(50);
+updateQuotaUI();
+
+// ===== 上传流程 =====
+let pendingFiles = [];
+let pendingIndex = 0;
+
+fileInput.addEventListener('change', e => {
+  pendingFiles = Array.from(e.target.files);
+  pendingIndex = 0;
+  if (pendingFiles.length) showCutoutDialog(pendingFiles[0]);
+});
+
+function showCutoutDialog(file) {
+  document.getElementById('dialogFileName').textContent = file.name;
+  document.getElementById('cutoutDialog').style.display = 'flex';
+}
+function cancelUpload() {
+  document.getElementById('cutoutDialog').style.display = 'none';
+  pendingFiles = []; fileInput.value = '';
+}
+function chooseUpload(mode) {
+  document.getElementById('cutoutDialog').style.display = 'none';
+  processFile(pendingFiles[pendingIndex], mode);
+}
+
+async function processFile(file, mode) {
+  const list = document.getElementById('processingList');
+  const itemId = 'p-' + Date.now();
+  const useCutout = (mode === 'cutout') && getQuota() > 0 && window.REMOVEBG_API_KEY;
+
+  if (!window.REMOVEBG_API_KEY) {
+    alert('请先设置 remove.bg API Key');
+    document.getElementById('keyDialog').style.display = 'flex';
+    cancelUpload();
+    return;
+  }
+
+  if (mode === 'cutout' && getQuota() <= 0) {
+    alert('AI抠图次数已用完，请选择"保留原图"或联系管理员充值');
+    showCutoutDialog(file);
+    return;
+  }
+
+  list.innerHTML += '<div class="upload-progress" id="' + itemId + '">'
+    + '<span class="file-name">' + file.name + '</span>'
+    + '<span class="status">' + (useCutout ? '⏳ 抠图中...' : '📷 原图上传中...') + '</span></div>';
+  const item = document.getElementById(itemId);
+  const st = item.querySelector('.status');
+  let method = 'direct';
+
+  if (useCutout) {
+    try {
+      const cachedB64 = getCachedCutout(file.name);
+      let blob;
+      if (cachedB64) {
+        blob = base64ToBlob(cachedB64);
+        method = 'cached';
+      } else {
+        blob = await Cutout.processFile(file, s => { method = s; });
+        if (method === 'api_removebg' || method === 'api_ali') {
+          const b64 = await blobToBase64(blob);
+          setCachedCutout(file.name, b64);
+        }
+        setQuota(getQuota() - 1);
+      }
+      await addProduct(file.name.replace(/\.[^.]+$/, ''), blob, true);
+      const msgs = { cached: '✅ 使用缓存（不扣额度）', api_removebg: '✅ AI抠图完成', api_ali: '✅ 阿里云抠图', local: '⚠️ API不可用，离线去底', fallback: '⚠️ 离线也无法处理，用原图' };
+      st.textContent = msgs[method] || '✅';
+      st.className = 'status ' + (method === 'fallback' || method === 'local' ? 'warn' : 'success');
+    } catch(err) {
+      console.error('抠图异常:', err);
+      st.textContent = '❌ 抠图失败: ' + (err.message || '未知错误');
+      st.className = 'status warn';
+      await addProduct(file.name.replace(/\.[^.]+$/, ''), file, false);
+    }
+  } else {
+    await addProduct(file.name.replace(/\.[^.]+$/, ''), file, false);
+    st.textContent = '✅ 原图上传';
+    st.className = 'status success';
+  }
+
+  setTimeout(() => { if (item) item.remove(); }, 3000);
+
+  pendingIndex++;
+  if (pendingIndex < pendingFiles.length) {
+    showCutoutDialog(pendingFiles[pendingIndex]);
+  } else {
+    fileInput.value = '';
+  }
+}
+
+// ===== Key 设置 =====
+function saveKey() {
+  var val = document.getElementById('keyInput').value.trim();
+  if (!val) return alert('请粘贴 remove.bg API Key');
+  localStorage.setItem('LANJI_RMBG_KEY', val);
+  window.REMOVEBG_API_KEY = val;
+  document.getElementById('keyDialog').style.display = 'none';
+  alert('Key 已保存！现在可以上传产品了。');
+}
+if (!localStorage.getItem('LANJI_RMBG_KEY')) {
+  document.getElementById('keyDialog').style.display = 'flex';
+}
+
+// ===== 退出登录 =====
+document.getElementById('btnLogout').addEventListener('click', function() {
+  localStorage.removeItem('langji_auth');
+  location.href = 'login.html';
+});
+
+renderGrid();
+</script>
+</body>
+</html>

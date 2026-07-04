@@ -1,0 +1,16 @@
+{
+  "name": "langji-preview",
+  "version": "1.0.0",
+  "description": "``` 浏览器打开 index.html  →  2D 产品场景组合器 浏览器打开 splat-viewer.html  →  3D 高斯泼溅查看器 ```",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@imgly/background-removal": "^1.7.0"
+  }
+}

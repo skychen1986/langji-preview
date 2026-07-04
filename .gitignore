@@ -1,0 +1,7 @@
+node_modules/
+vendor/
+*.py
+*.ps1
+test*.html
+.DS_Store
+Thumbs.db

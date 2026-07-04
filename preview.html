@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>朗迹 · 场景预览</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-title">📐 场景预览</span>
+  <span>
+    <a href="dashboard.html" class="btn btn-secondary" style="padding:4px 12px;font-size:11px;text-decoration:none;">← 返回管理</a>
+    <span class="topbar-badge" id="productCount" style="margin-left:8px;">0 个产品</span>
+  </span>
+</div>
+
+<div class="scene-wrapper" id="sceneWrapper">
+  <div class="scene-area" id="sceneArea" data-scene="playground">
+    <div class="scene-hint" id="sceneHint">点下方产品添加到场景 · 拖动摆放 · 滚轮缩放 · Shift+滚轮旋转</div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="chip-row" id="sceneChips"><span class="chip-label">场景</span></div>
+  <div class="chip-row product-chips" id="productChips"><span class="chip-label">产品</span></div>
+  <div class="action-bar">
+    <button class="btn btn-danger" onclick="SceneEngine.deleteSelected()">删除</button>
+    <button class="btn btn-secondary" onclick="SceneEngine.clearAll()">清空</button>
+    <button class="btn btn-success" onclick="SceneEngine.exportScreenshot()">截图</button>
+  </div>
+</div>
+
+<img src="langji-wave.png" class="langji-corner" id="langjiCorner" title="截图试试！">
+<div class="langji-tip" id="langjiTip">摆好场景，一键截图发给客户！</div>
+
+<input type="file" id="sceneUpload" accept="image/*" onchange="SceneEngine.handleUpload(event)">
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/pseudo3d.js"></script>
+<script src="js/effects.js"></script>
+<script>
+const SCENES = [
+  { id: 'playground', name: '游乐园', icon: '', image: 'scenes/playground.jpg' },
+  { id: 'school',     name: '学校',   icon: '', image: 'scenes/school.jpg' },
+  { id: 'beach',      name: '沙滩',   icon: '', image: 'scenes/beach.jpg' },
+  { id: 'mall',       name: '商场',   icon: '', image: 'scenes/mall.jpg' },
+  { id: 'community',  name: '小区',   icon: '', image: '' },
+  { id: 'park',       name: '公园',   icon: '', image: '' },
+];
+
+// 从 localStorage 读取（dashboard 存的是 base64，直接可用）
+async function loadProducts() {
+  try {
+    const raw = localStorage.getItem('langji_factory_products');
+    if (!raw) return [];
+    const meta = JSON.parse(raw).filter(m => m.id);
+    return meta.map((m, i) => ({
+      id: 'fp-' + i,
+      name: m.name,
+      image: m.image || '', // base64 data URL，直接当图片 src
+      w: 200, h: 200
+    }));
+  } catch(e) { console.error('加载产品失败:', e); return []; }
+}
+
+(async function init() {
+const PRODUCTS = await loadProducts();
+console.log('preview 加载产品:', PRODUCTS.length, '个', PRODUCTS.map(p=>p.name));
+
+const hint = document.getElementById('sceneHint');
+if (PRODUCTS.length === 0) {
+  hint.textContent = '还没有产品。请先去「工厂管理」上传产品照片 →';
+  hint.style.color = 'rgba(255,200,100,0.6)';
+}
+
+SceneEngine.init({
+  sceneAreaId: 'sceneArea', sceneWrapperId: 'sceneWrapper', sceneHintId: 'sceneHint',
+  productCountId: 'productCount', sceneChipsId: 'sceneChips', productChipsId: 'productChips',
+  sceneUploadId: 'sceneUpload',
+  scenes: SCENES, products: PRODUCTS, defaultScene: 'playground', enablePseudo3D: true
+});
+
+// 截图庆祝
+const origExport2 = SceneEngine.exportScreenshot;
+SceneEngine.exportScreenshot = function() { window.showLangjiCelebrate(); return origExport2.call(this); };
+
+// 角落角色提示
+const c2 = document.getElementById('langjiCorner');
+const t2 = document.getElementById('langjiTip');
+if (c2 && t2) {
+  c2.addEventListener('mouseenter', () => t2.classList.add('show'));
+  c2.addEventListener('mouseleave', () => t2.classList.remove('show'));
+  setTimeout(() => { t2.classList.add('show'); setTimeout(() => t2.classList.remove('show'), 3000); }, 2000);
+}
+
+})();
+</script>
+</body>
+</html>

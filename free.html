@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>朗迹 · 免费体验</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-title">朗迹 · 免费体验</span>
+  <span>
+    <a href="login.html" style="color:#a78bfa;font-size:11px;text-decoration:none;">登录</a>
+    <span class="topbar-badge" id="productCount" style="margin-left:8px;">0 个产品</span>
+  </span>
+</div>
+
+<div class="scene-wrapper" id="sceneWrapper">
+  <div class="scene-area" id="sceneArea" data-scene="playground">
+    <div class="scene-hint" id="sceneHint">点下方产品添加到场景 · 拖动摆放 · 滚轮缩放 · Shift+滚轮旋转</div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="chip-row" id="sceneChips"><span class="chip-label">场景</span></div>
+  <div class="chip-row product-chips" id="productChips"><span class="chip-label">产品</span></div>
+  <div id="cutoutStatus" style="display:none;padding:4px 12px;font-size:10px;color:#a78bfa;">⏳ 正在抠图...</div>
+  <div class="action-bar">
+    <button class="btn btn-danger" onclick="SceneEngine.deleteSelected()">删除</button>
+    <button class="btn btn-secondary" onclick="SceneEngine.clearAll()">清空</button>
+    <button class="btn btn-success" onclick="SceneEngine.exportScreenshot()">截图</button>
+    <a href="login.html" class="btn btn-primary" style="text-decoration:none;flex:1;">升级专业版</a>
+  </div>
+</div>
+
+<input type="file" id="sceneUpload" accept="image/*" onchange="SceneEngine.handleUpload(event)">
+<input type="file" id="productUpload" accept="image/*" style="display:none" onchange="handleProductUpload(event)">
+
+<img src="langji-point.png" class="langji-corner" id="langjiCorner" title="需要帮助？">
+<div class="langji-tip" id="langjiTip">拖产品到场景里试试！</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/pseudo3d.js"></script>
+<script src="js/cutout.js"></script>
+<script src="js/effects.js"></script>
+<script>
+// 截图时弹出庆祝角色
+const origExport = SceneEngine.exportScreenshot;
+SceneEngine.exportScreenshot = function() {
+  window.showLangjiCelebrate();
+  return origExport.call(this);
+};
+
+// 角落角色悬停提示
+const corner = document.getElementById('langjiCorner');
+const tip = document.getElementById('langjiTip');
+if (corner && tip) {
+  corner.addEventListener('mouseenter', () => tip.classList.add('show'));
+  corner.addEventListener('mouseleave', () => tip.classList.remove('show'));
+  setTimeout(() => { tip.classList.add('show'); setTimeout(() => tip.classList.remove('show'), 3000); }, 2000);
+}
+const corner = document.getElementById('langjiCorner');
+const tip = document.getElementById('langjiTip');
+if (corner && tip) {
+  corner.addEventListener('mouseenter', () => tip.classList.add('show'));
+  corner.addEventListener('mouseleave', () => tip.classList.remove('show'));
+  // 3秒后自动显示一次提示
+  setTimeout(() => { tip.classList.add('show'); setTimeout(() => tip.classList.remove('show'), 3000); }, 2000);
+}
+</script>
+<script>
+// ===== 抠图 API Key（存 localStorage，不在源码里暴露）=====
+// 首次使用：在浏览器控制台输入下面两行设置 Key
+//   localStorage.setItem('LANJI_RMBG_KEY', '你的remove.bg Key');
+//   localStorage.setItem('LANJI_ALI_KEY', '你的阿里云AppCode');
+// 之后自动读取，不需要再设
+
+const KEYS = {
+  removebg: localStorage.getItem('LANJI_RMBG_KEY') || '',
+  ali: localStorage.getItem('LANJI_ALI_KEY') || '',
+};
+
+// 首次自动从旧变量迁移
+if (!KEYS.removebg && window.REMOVEBG_API_KEY) {
+  KEYS.removebg = window.REMOVEBG_API_KEY;
+  localStorage.setItem('LANJI_RMBG_KEY', KEYS.removebg);
+}
+
+window.REMOVEBG_API_KEY = KEYS.removebg;
+window.ALI_AK_ID = KEYS.ali;
+window.ALI_AK_SECRET = '';
+
+console.log('抠图引擎就绪 | remove.bg:', KEYS.removebg ? '已配置' : '未配置', '| 阿里云:', KEYS.ali ? '已配置' : '未配置');
+
+const SCENES = [
+  { id: 'playground', name: '游乐园', icon: '', image: 'scenes/playground.jpg' },
+  { id: 'school',     name: '学校',   icon: '', image: 'scenes/school.jpg' },
+  { id: 'beach',      name: '沙滩',   icon: '', image: 'scenes/beach.jpg' },
+  { id: 'mall',       name: '商场',   icon: '', image: 'scenes/mall.jpg' },
+  { id: 'community',  name: '小区',   icon: '', image: '' },
+  { id: 'park',       name: '公园',   icon: '', image: '' },
+];
+
+const PRODUCTS = [
+  { id: 'p1', name: '演示产品 1', image: 'products/product-1.png', w: 200, h: 200 },
+  { id: 'p2', name: '演示产品 2', image: 'products/product-2.png', w: 200, h: 160 },
+  { id: 'p3', name: '演示产品 3', image: 'products/product-3.png', w: 200, h: 200 },
+  { id: 'p4', name: '演示产品 4', image: 'products/product-4.png', w: 200, h: 180 },
+  { id: 'p5', name: '演示产品 5', image: 'products/product-5.png', w: 200, h: 180 },
+];
+
+SceneEngine.init({
+  sceneAreaId: 'sceneArea', sceneWrapperId: 'sceneWrapper', sceneHintId: 'sceneHint',
+  productCountId: 'productCount', sceneChipsId: 'sceneChips', productChipsId: 'productChips',
+  sceneUploadId: 'sceneUpload',
+  scenes: SCENES, products: PRODUCTS, defaultScene: 'playground', enablePseudo3D: true
+});
+
+// 在 init 之后追加上传按钮（否则会被 renderProducts 覆盖）
+const uploadChip = document.createElement('div');
+uploadChip.className = 'chip chip-upload';
+uploadChip.textContent = '📷 +上传抠图';
+uploadChip.onclick = () => document.getElementById('productUpload').click();
+document.getElementById('productChips').appendChild(uploadChip);
+
+// 抠图并添加到场景
+window.handleProductUpload = async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('cutoutStatus');
+  statusEl.style.display = 'block'; statusEl.style.color = '#a78bfa';
+  statusEl.textContent = '⏳ 正在抠图...';
+
+  const statusMessages = {
+    'api_removebg': '✅ AI抠图完成 (remove.bg)',
+    'api_ali': '✅ AI抠图完成 (阿里云)',
+    'quota': '⚠️ remove.bg额度用完，切换阿里云...',
+    'local': '✅ 离线抠图完成',
+    'fallback': '⚠️ 全部失败，使用原图',
+  };
+  let method = 'fallback';
+
+  try {
+    const blob = await Cutout.processFile(file, (s) => { method = s; });
+    const url = URL.createObjectURL(blob);
+    const name = file.name.replace(/\.[^.]+$/,'');
+    const newId = 'up-' + Date.now();
+    PRODUCTS.push({ id: newId, name: name, image: url, w: 200, h: 200 });
+    SceneEngine.cfg.products = PRODUCTS;
+    SceneEngine.renderProducts();
+    SceneEngine.add(newId);
+    document.getElementById('productChips').appendChild(uploadChip);
+    statusEl.textContent = statusMessages[method] || '✅ 完成';
+    if (method !== 'api') statusEl.style.color = '#fbbf24';
+    setTimeout(() => { statusEl.style.display = 'none'; statusEl.style.color = '#a78bfa'; }, 3000);
+  } catch(err) {
+    console.error(err);
+    const url = URL.createObjectURL(file);
+    const newId = 'up-' + Date.now();
+    PRODUCTS.push({ id: newId, name: file.name.replace(/\.[^.]+$/,''), image: url, w: 200, h: 200 });
+    SceneEngine.cfg.products = PRODUCTS;
+    SceneEngine.renderProducts();
+    SceneEngine.add(newId);
+    document.getElementById('productChips').appendChild(uploadChip);
+    statusEl.textContent = '⚠️ ' + (err.message || '失败');
+    statusEl.style.color = '#f87171';
+    setTimeout(() => { statusEl.style.display = 'none'; statusEl.style.color = '#a78bfa'; }, 5000);
+  }
+  e.target.value = '';
+};
+</script>
+</body>
+</html>
