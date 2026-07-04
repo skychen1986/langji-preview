@@ -29,7 +29,6 @@
   <div class="upload-zone" id="uploadZone">
     <img src="langji-point.png" class="langji-dash" alt="上传">
     <div style="color:#ccc;">点击或拖拽上传产品照片</div>
-    <div style="font-size:11px;color:#555;margin-top:4px;" id="quotaHint">AI抠图剩余：<strong id="quotaCount">-</strong> 次</div>
     <input type="file" id="productUpload" accept="image/*" multiple style="display:none">
   </div>
 
@@ -74,17 +73,44 @@ if (!localStorage.getItem('langji_auth')) { location.href = 'login.html'; }
 // API Key 只从 localStorage 读取，源代码零硬编码
 window.REMOVEBG_API_KEY = localStorage.getItem('LANJI_RMBG_KEY') || '';
 
-const STORAGE_KEY = 'langji_factory_products';
 const CACHE_KEY = 'langji_cutout_cache';
+const API = '/api/products';
 
-// ===== 存储：纯 localStorage base64 =====
-function loadProducts() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { return []; }
+// ===== 存储：Cloudflare KV，逐张加载避免一次拉太多 ====
+async function loadProducts() {
+  try {
+    var resp = await fetch(API);
+    if (!resp.ok) throw new Error('API error');
+    var list = await resp.json();
+    // 后台逐张取图
+    var prods = [];
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      prods.push({ id: m.id, name: m.name, cutout: m.cutout, time: m.time, image: '' });
+      // 异步加载图片
+      (function(idx, pid) {
+        fetch(API + '?id=' + pid).then(function(r){ return r.json(); }).then(function(full) {
+          if (prods[idx]) { prods[idx].image = full.image || ''; renderGridFromCache(prods); }
+        }).catch(function(){});
+      })(i, m.id);
+    }
+    return prods;
+  } catch(e) { console.error('加载失败:', e); return []; }
 }
-function saveProducts(list) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch(e) {
-    alert('存储空间不足！请删除一些产品后重试。');
+
+function renderGridFromCache(products) {
+  var grid = document.getElementById('productGrid');
+  if (!products.length) {
+    grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>还没有产品，上传第一张照片开始</div></div>';
+    return;
   }
+  grid.innerHTML = products.map(function(p) {
+    return '<div class="product-card">'
+      + '<img src="' + (p.image || '') + '" alt="' + p.name + '" loading="lazy" style="width:100%;height:100px;object-fit:contain;border-radius:4px;">'
+      + '<div class="name">' + p.name + (p.cutout ? ' ✂' : '') + '</div>'
+      + '<div style="margin-top:4px;"><button onclick="confirmDelete(\'' + p.id + '\')" style="background:#3a1520;color:#f87171;border:none;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">删除</button></div>'
+      + '</div>';
+  }).join('');
 }
 
 function blobToBase64(blob) {
@@ -93,6 +119,30 @@ function blobToBase64(blob) {
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
+  });
+}
+
+// 压缩图片：250px + WebP，抠图透明，普通图小体积
+function compressBlob(blob, isCutout) {
+  return new Promise(function(resolve) {
+    var img = new Image();
+    var url = URL.createObjectURL(blob);
+    img.onload = function() {
+      URL.revokeObjectURL(url);
+      var max = 800;
+      var w = img.width, h = img.height;
+      if (w > max || h > max) {
+        var ratio = Math.min(max/w, max/h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      // WebP 支持透明，体积比 PNG 小 3-5 倍
+      c.toBlob(function(b) { resolve(b); }, 'image/webp', 0.75);
+    };
+    img.src = url;
   });
 }
 
@@ -118,37 +168,32 @@ function setCachedCutout(fileName, base64) {
   } catch(e) {}
 }
 
-function renderGrid() {
-  const products = loadProducts();
-  const grid = document.getElementById('productGrid');
-  if (products.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>还没有产品，上传第一张照片开始</div></div>';
-    return;
-  }
-  const rows = products.map(p =>
-    '<div class="product-card">'
-    + '<img src="' + (p.image || '') + '" alt="' + p.name + '" loading="lazy" style="width:100%;height:100px;object-fit:contain;border-radius:4px;">'
-    + '<div class="name">' + p.name + (p.cutout ? ' ✂' : '') + '</div>'
-    + '<div style="margin-top:4px;"><button onclick="confirmDelete(\'' + p.id + '\')" style="background:#3a1520;color:#f87171;border:none;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">删除</button></div>'
-    + '</div>'
-  );
-  grid.innerHTML = rows.join('');
+async function renderGrid() {
+  var grid = document.getElementById('productGrid');
+  grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>加载中...</div></div>';
+  var products = await loadProducts();
+  renderGridFromCache(products);
 }
 
-function confirmDelete(pid) {
+async function confirmDelete(pid) {
   if (!confirm('确定删除？')) return;
-  saveProducts(loadProducts().filter(p => p.id !== pid));
+  await fetch(API + '?id=' + pid, { method: 'DELETE' });
   renderGrid();
 }
 
 async function addProduct(name, blob, cutout) {
-  const id = 'prod-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
-  const base64 = await blobToBase64(blob);
-  const products = loadProducts();
-  products.push({ id: id, name: name, cutout: cutout, time: Date.now(), image: base64 });
-  saveProducts(products);
+  // 压缩后再上传，抠图保留透明
+  var compressed = await compressBlob(blob, cutout);
+  var base64 = await blobToBase64(compressed);
+  var resp = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, cutout, image: base64 }),
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error('API error');
   renderGrid();
-  return id;
+  return data.id;
 }
 
 // ===== 上传交互 =====
@@ -162,13 +207,7 @@ uploadZone.addEventListener('drop', e => {
   if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
 });
 
-// ===== 抠图额度 =====
-const QUOTA_KEY = 'langji_cutout_quota';
-function getQuota() { return parseInt(localStorage.getItem(QUOTA_KEY)) || 0; }
-function setQuota(n) { localStorage.setItem(QUOTA_KEY, n); updateQuotaUI(); }
-function updateQuotaUI() { document.getElementById('quotaCount').textContent = getQuota(); }
-if (!localStorage.getItem(QUOTA_KEY)) setQuota(50);
-updateQuotaUI();
+// 抠图走云端代理，不需要本地额度
 
 // ===== 上传流程 =====
 let pendingFiles = [];
@@ -196,20 +235,7 @@ function chooseUpload(mode) {
 async function processFile(file, mode) {
   const list = document.getElementById('processingList');
   const itemId = 'p-' + Date.now();
-  const useCutout = (mode === 'cutout') && getQuota() > 0 && window.REMOVEBG_API_KEY;
-
-  if (!window.REMOVEBG_API_KEY) {
-    alert('请先设置 remove.bg API Key');
-    document.getElementById('keyDialog').style.display = 'flex';
-    cancelUpload();
-    return;
-  }
-
-  if (mode === 'cutout' && getQuota() <= 0) {
-    alert('AI抠图次数已用完，请选择"保留原图"或联系管理员充值');
-    showCutoutDialog(file);
-    return;
-  }
+  const useCutout = (mode === 'cutout');
 
   list.innerHTML += '<div class="upload-progress" id="' + itemId + '">'
     + '<span class="file-name">' + file.name + '</span>'
@@ -231,10 +257,9 @@ async function processFile(file, mode) {
           const b64 = await blobToBase64(blob);
           setCachedCutout(file.name, b64);
         }
-        setQuota(getQuota() - 1);
       }
       await addProduct(file.name.replace(/\.[^.]+$/, ''), blob, true);
-      const msgs = { cached: '✅ 使用缓存（不扣额度）', api_removebg: '✅ AI抠图完成', api_ali: '✅ 阿里云抠图', local: '⚠️ API不可用，离线去底', fallback: '⚠️ 离线也无法处理，用原图' };
+      const msgs = { api_proxy: '✅ AI抠图完成（云端）', cached: '✅ 使用缓存', api_removebg: '✅ AI抠图完成', api_ali: '✅ 阿里云抠图', local: '⚠️ 离线去底（云端不可用）', fallback: '⚠️ 全部失败，用原图' };
       st.textContent = msgs[method] || '✅';
       st.className = 'status ' + (method === 'fallback' || method === 'local' ? 'warn' : 'success');
     } catch(err) {
@@ -268,9 +293,8 @@ function saveKey() {
   document.getElementById('keyDialog').style.display = 'none';
   alert('Key 已保存！现在可以上传产品了。');
 }
-if (!localStorage.getItem('LANJI_RMBG_KEY')) {
-  document.getElementById('keyDialog').style.display = 'flex';
-}
+// 代理优先，不需要客户端 Key。如需直连 remove.bg 可手动设置
+// if (!localStorage.getItem('LANJI_RMBG_KEY')) { document.getElementById('keyDialog').style.display = 'flex'; }
 
 // ===== 退出登录 =====
 document.getElementById('btnLogout').addEventListener('click', function() {

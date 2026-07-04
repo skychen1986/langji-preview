@@ -21,8 +21,9 @@ body { background: #0a0a14; color: #fff; font-family: -apple-system, 'Microsoft 
 .scene-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.35); pointer-events: none; background: rgba(0,0,0,0.35); padding: 4px 12px; border-radius: 12px; transition: opacity 0.3s; }
 
 /* === Product Items === */
-.product-item { position: absolute; cursor: grab; transform-origin: center center; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); transition: box-shadow 0.2s, outline 0.15s; min-width: 40px; min-height: 40px; background-size: contain; background-position: center; background-repeat: no-repeat; display: flex; align-items: center; justify-content: center; }
+.product-item { position: absolute; cursor: grab; transform-origin: center center; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); transition: box-shadow 0.2s, outline 0.15s; min-width: 40px; min-height: 40px; background-size: contain; background-position: center; background-repeat: no-repeat; display: flex; align-items: center; justify-content: center; touch-action: none; -webkit-user-select: none; user-select: none; will-change: transform; -webkit-transform: translateZ(0); }
 .product-item:active { cursor: grabbing; }
+.scene-area { touch-action: none; }
 .product-item.selected { outline: 2px solid #fff; outline-offset: 3px; box-shadow: 0 4px 24px rgba(255,255,255,0.3); }
 .product-label { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: rgba(255,255,255,0.7); white-space: nowrap; background: rgba(0,0,0,0.55); padding: 2px 8px; border-radius: 4px; pointer-events: none; }
 .scale-badge { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 9px; color: #fff; background: rgba(124,58,237,0.8); padding: 2px 8px; border-radius: 8px; pointer-events: none; display: none; }

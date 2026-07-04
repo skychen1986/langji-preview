@@ -1,0 +1,29 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/cutout",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/cutout.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/health",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/health.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/products",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/products.js:onRequest"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}

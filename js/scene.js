@@ -35,7 +35,8 @@ const SceneEngine = (function() {
     let h = '<span class="chip-label">产品</span>';
     cfg.products.forEach(p => {
       const delBtn = p.id.startsWith('up-') ? `<span onclick="event.stopPropagation();SceneEngine.removeProduct('${p.id}')" style="margin-left:2px;font-size:14px;line-height:1;cursor:pointer;opacity:0.5;" title="删除">×</span>` : '';
-      h += `<div class="chip pchip" style="background-image:url(${p.image});background-size:cover;" onclick="SceneEngine.add('${p.id}')">${p.name}${delBtn}</div>`;
+      var displayName = p.name.length > 6 ? p.name.slice(0,6) + '..' : p.name;
+      h += '<div class="chip pchip" style="background-image:url(' + p.image + ');background-size:cover;" onclick="SceneEngine.add(\'' + p.id + '\')" title="' + p.name + '">' + displayName + delBtn + '</div>';
     });
     productChipsEl.innerHTML = h;
   }
@@ -134,6 +135,7 @@ const SceneEngine = (function() {
   }
   function onMove(e) {
     if (!dragInfo || dragInfo.id !== e.currentTarget.id) return;
+    if (pinchD0 !== null) return; // 双指缩放中不拖拽
     e.preventDefault();
     const inst = instances.find(p => p.id === dragInfo.id);
     if (!inst) return;
@@ -165,33 +167,68 @@ const SceneEngine = (function() {
     applyTransform(el, inst);
   }
 
-  // Pinch
+  // Pinch — 用 identifier 追踪手指，避免手指切换导致跳变
+  var pinchIds = null;
+  function getPinchDist(e) {
+    if (e.touches.length < 2) return null;
+    // 优先用已记录的手指 ID
+    var t0 = null, t1 = null;
+    if (pinchIds) {
+      for (var i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === pinchIds[0]) t0 = e.touches[i];
+        if (e.touches[i].identifier === pinchIds[1]) t1 = e.touches[i];
+      }
+    }
+    // 如果有手指离开了，用当前的前两根
+    if (!t0 || !t1) {
+      t0 = e.touches[0]; t1 = e.touches[1];
+      pinchIds = [t0.identifier, t1.identifier];
+    }
+    return {
+      d: Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY),
+      a: Math.atan2(t0.clientY-t1.clientY, t0.clientX-t1.clientX)*180/Math.PI
+    };
+  }
   function onTouchS(e) {
-    if (e.touches.length === 2 && selectedId) {
-      pinchD0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-      pinchA0 = Math.atan2(e.touches[0].clientY-e.touches[1].clientY, e.touches[0].clientX-e.touches[1].clientX)*180/Math.PI;
+    if (e.touches.length >= 2 && selectedId) {
+      // 取消拖拽，进入纯缩放模式
+      if (dragInfo) {
+        dragInfo.el.removeEventListener('pointermove', onMove);
+        dragInfo.el.removeEventListener('pointerup', onUp);
+        dragInfo = null;
+      }
+      var p = getPinchDist(e);
+      if (p) { pinchD0 = p.d; pinchA0 = p.a; }
     }
   }
   function onTouchM(e) {
-    if (pinchD0===null || !selectedId || e.touches.length!==2) return;
+    if (pinchD0===null || !selectedId || e.touches.length<2) return;
     e.preventDefault();
-    const inst = instances.find(p => p.id === selectedId);
+    var inst = instances.find(function(p){return p.id===selectedId;});
     if (!inst) return;
-    const el = document.getElementById(selectedId);
+    var el = document.getElementById(selectedId);
     if (!el) return;
-    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    const a = Math.atan2(e.touches[0].clientY-e.touches[1].clientY, e.touches[0].clientX-e.touches[1].clientX)*180/Math.PI;
-    inst.scale = Math.max(0.2, Math.min(3.0, inst.scale*(d/pinchD0)));
-    inst.rotation = (inst.rotation+(a-pinchA0))%360;
-    pinchD0=d; pinchA0=a;
+    var p = getPinchDist(e);
+    if (!p) return;
+    var ns = inst.scale * (p.d / pinchD0); ns = Math.max(0.2, Math.min(3.0, ns));
+    inst.scale = inst.scale * 0.6 + ns * 0.4;
+    var dr = p.a - pinchA0; if (Math.abs(dr) > 1.5) inst.rotation = (inst.rotation + dr) % 360;
+    pinchD0 = p.d; pinchA0 = p.a;
     applyTransform(el, inst);
   }
-  function onTouchE(e) { if (e.touches.length<2) { pinchD0=null; pinchA0=null; } }
+  function onTouchE(e) {
+    if (e.touches.length < 2) { pinchD0 = null; pinchA0 = null; pinchIds = null; }
+  }
 
+  var transformRAF = null;
   function applyTransform(el, inst) {
-    el.style.transform = `rotate(${inst.rotation}deg) scale(${inst.scale})`;
-    const b = el.querySelector('.scale-badge');
-    if (b) b.textContent = Math.round(inst.scale*100)+'% | '+Math.round(inst.rotation)+'°';
+    // requestAnimationFrame 确保 Safari 同步渲染
+    if (transformRAF) cancelAnimationFrame(transformRAF);
+    transformRAF = requestAnimationFrame(function() {
+      el.style.transform = 'rotate(' + inst.rotation + 'deg) scale(' + inst.scale + ')';
+      var b = el.querySelector('.scale-badge');
+      if (b) b.textContent = Math.round(inst.scale*100) + '% | ' + Math.round(inst.rotation) + '°';
+    });
   }
 
   // Screenshot

@@ -4,29 +4,33 @@
 
 const Cutout = (function() {
 
-  // ===== 策略0：Vercel 云函数代理（优先，Key 在服务器端）=====
+  // ===== 策略0：Cloudflare 云函数代理（优先，Key 在服务器端）=====
   async function tryProxy(imageBlob) {
-    // 把图片转 base64 发给代理
-    const base64 = await blobToBase64(imageBlob);
-    const resp = await fetch('/api/cutout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64 }),
-    });
-    const data = await resp.json();
+    var base64 = await blobToBase64(imageBlob);
+    var resp;
+    try {
+      resp = await fetch('/api/cutout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64 }),
+      });
+    } catch(netErr) {
+      throw new Error('PROXY_NET_' + (netErr.message || 'fetch failed'));
+    }
+    var data;
+    try { data = await resp.json(); } catch(e) { throw new Error('PROXY_JSON_' + resp.status); }
     if (!resp.ok) {
-      const msg = data.error || '';
-      if (msg.includes('quota') || msg.includes('insufficient')) throw new Error('QUOTA');
-      throw new Error('PROXY_' + resp.status);
+      var msg = data.error || ('HTTP ' + resp.status);
+      if (msg.indexOf('quota') >= 0 || msg.indexOf('insufficient') >= 0) throw new Error('QUOTA');
+      throw new Error('PROXY_' + msg.substring(0, 60));
     }
     if (!data.image) throw new Error('PROXY_EMPTY');
-    // base64 → blob
-    const b64 = data.image;
-    const parts = b64.split(',');
-    const mime = parts[0].match(/:(.*?);/)[1];
-    const bytes = atob(parts[1]);
-    const arr = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    var b64 = data.image;
+    var parts = b64.split(',');
+    var mime = parts[0].match(/:(.*?);/)[1];
+    var bytes = atob(parts[1]);
+    var arr = new Uint8Array(bytes.length);
+    for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
     return new Blob([arr], { type: mime });
   }
 
