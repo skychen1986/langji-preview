@@ -1,10 +1,36 @@
 // js/cutout.js
-// 抠图三级策略：remove.bg → 阿里云视觉智能 → 离线Canvas
-// API Key 在 free.html 中设置
+// 抠图策略：Vercel代理 → remove.bg → 阿里云 → 离线Canvas
+// API Key 永不泄露到前端
 
 const Cutout = (function() {
 
-  // ===== 策略1：remove.bg API（国际，AI抠图最准）=====
+  // ===== 策略0：Vercel 云函数代理（优先，Key 在服务器端）=====
+  async function tryProxy(imageBlob) {
+    // 把图片转 base64 发给代理
+    const base64 = await blobToBase64(imageBlob);
+    const resp = await fetch('/api/cutout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64 }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      const msg = data.error || '';
+      if (msg.includes('quota') || msg.includes('insufficient')) throw new Error('QUOTA');
+      throw new Error('PROXY_' + resp.status);
+    }
+    if (!data.image) throw new Error('PROXY_EMPTY');
+    // base64 → blob
+    const b64 = data.image;
+    const parts = b64.split(',');
+    const mime = parts[0].match(/:(.*?);/)[1];
+    const bytes = atob(parts[1]);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  // ===== 策略1：remove.bg API（客户端直连，需 localStorage 有 Key）=====
   async function tryRemoveBg(imageBlob) {
     const key = window.REMOVEBG_API_KEY;
     if (!key) throw new Error('NO_KEY');
@@ -23,31 +49,19 @@ const Cutout = (function() {
     return resp.blob();
   }
 
-  // ===== 策略2：阿里云视觉智能（国内，¥0.01/张）=====
-  // AK/SK 在阿里云控制台获取：ram.console.aliyun.com
+  // ===== 策略2：阿里云视觉智能 =====
   async function tryAliVision(imageBlob) {
     const akId = window.ALI_AK_ID;
     const akSec = window.ALI_AK_SECRET;
     if (!akId || !akSec) throw new Error('NO_KEY');
-
-    // 把图片转 base64
     const base64 = await blobToBase64(imageBlob);
-
-    // 阿里云视觉智能 API：通用分割
-    // 需要 HMAC-SHA1 签名，用简化方式调用
     const body = JSON.stringify({ ImageURL: base64 });
-    // 使用阿里云 OpenAPI 通用端点
     const resp = await fetch('https://imageseg.cn-shanghai.aliyuncs.com/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'APPCODE ' + akId, // 简化为 APPCODE 模式（需在阿里云市场购买 API）
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'APPCODE ' + akId },
       body,
     });
-
     if (!resp.ok) throw new Error('ALI_' + resp.status);
-
     const result = await resp.json();
     if (result.Data && result.Data.ImageURL) {
       const imgResp = await fetch(result.Data.ImageURL);
@@ -63,13 +77,11 @@ const Cutout = (function() {
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
-
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     const w = canvas.width, h = canvas.height;
     const ew = Math.max(3, Math.floor(Math.min(w, h) * 0.05));
     const samples = [];
-
     for (let x = 0; x < w; x++) {
       for (let y = 0; y < ew; y++) { const i = (y*w+x)*4; samples.push({r:data[i],g:data[i+1],b:data[i+2]}); }
       for (let y = h-ew; y < h; y++) { const i = (y*w+x)*4; samples.push({r:data[i],g:data[i+1],b:data[i+2]}); }
@@ -79,12 +91,10 @@ const Cutout = (function() {
       for (let x = w-ew; x < w; x++) { const i = (y*w+x)*4; samples.push({r:data[i],g:data[i+1],b:data[i+2]}); }
     }
     if (samples.length < 100) return imageBlob;
-
     const avgR = samples.reduce((s,v)=>s+v.r,0)/samples.length;
     const avgG = samples.reduce((s,v)=>s+v.g,0)/samples.length;
     const avgB = samples.reduce((s,v)=>s+v.b,0)/samples.length;
     const threshold = 55;
-
     let removed = 0;
     for (let i = 0; i < data.length; i += 4) {
       const dr = data[i]-avgR, dg = data[i+1]-avgG, db = data[i+2]-avgB;
@@ -93,7 +103,6 @@ const Cutout = (function() {
       else if (dist < threshold+25) { data[i+3] = Math.round(data[i+3]*((dist-threshold)/25)); }
     }
     if (removed > w*h*0.6) return imageBlob;
-
     ctx.putImageData(imageData, 0, 0);
     return new Promise(r => canvas.toBlob(r, 'image/png'));
   }
@@ -101,7 +110,8 @@ const Cutout = (function() {
   // ===== 统一入口 =====
   async function processFile(file, onStatus) {
     const strategies = [
-      { fn: tryRemoveBg, name: 'api_removebg' },
+      { fn: tryProxy, name: 'api_proxy' },        // 优先 Vercel 代理
+      { fn: tryRemoveBg, name: 'api_removebg' },  // 降级：客户端直连
       { fn: tryAliVision, name: 'api_ali' },
       { fn: tryLocal, name: 'local' },
     ];
@@ -109,18 +119,18 @@ const Cutout = (function() {
     for (const s of strategies) {
       try {
         const result = await s.fn(file);
-        if (result === file) continue; // 返回原图=没处理，试下一个
+        if (result === file) continue;
         onStatus && onStatus(s.name);
         return result;
       } catch (e) {
         const msg = e.message || '';
         if (msg === 'QUOTA') onStatus && onStatus('quota');
+        if (msg === 'NO_KEY') {} // 静默跳过
         console.log('抠图策略 ' + s.name + ' 失败:', msg);
         continue;
       }
     }
 
-    // 全部失败，返回原图
     onStatus && onStatus('fallback');
     return file;
   }
