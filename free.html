@@ -53,20 +53,12 @@ SceneEngine.exportScreenshot = function() {
 };
 
 // 角落角色悬停提示
-const corner = document.getElementById('langjiCorner');
-const tip = document.getElementById('langjiTip');
+var corner = document.getElementById('langjiCorner');
+var tip = document.getElementById('langjiTip');
 if (corner && tip) {
-  corner.addEventListener('mouseenter', () => tip.classList.add('show'));
-  corner.addEventListener('mouseleave', () => tip.classList.remove('show'));
-  setTimeout(() => { tip.classList.add('show'); setTimeout(() => tip.classList.remove('show'), 3000); }, 2000);
-}
-const corner = document.getElementById('langjiCorner');
-const tip = document.getElementById('langjiTip');
-if (corner && tip) {
-  corner.addEventListener('mouseenter', () => tip.classList.add('show'));
-  corner.addEventListener('mouseleave', () => tip.classList.remove('show'));
-  // 3秒后自动显示一次提示
-  setTimeout(() => { tip.classList.add('show'); setTimeout(() => tip.classList.remove('show'), 3000); }, 2000);
+  corner.addEventListener('mouseenter', function() { tip.classList.add('show'); });
+  corner.addEventListener('mouseleave', function() { tip.classList.remove('show'); });
+  setTimeout(function() { tip.classList.add('show'); setTimeout(function() { tip.classList.remove('show'); }, 3000); }, 2000);
 }
 </script>
 <script>

@@ -2,10 +2,15 @@
 // 场景引擎：产品拖动/缩放/旋转/截图 · 从 MVP 抽离
 
 const SceneEngine = (function() {
-  let cfg, sceneArea, sceneWrapper, sceneHint, productCountEl,
+  var cfg, sceneArea, sceneWrapper, sceneHint, productCountEl,
       sceneChipsEl, productChipsEl, sceneUploadEl;
-  let currentScene, selectedId = null, instances = [], counter = 0;
-  let dragInfo = null, pinchD0 = null, pinchA0 = null;
+  var currentScene, selectedId = null, instances = [], counter = 0;
+  var dragInfo = null, pinchD0 = null, pinchA0 = null;
+
+  function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   function init(config) {
     cfg = config;
@@ -34,9 +39,9 @@ const SceneEngine = (function() {
   function renderProducts() {
     let h = '<span class="chip-label">产品</span>';
     cfg.products.forEach(p => {
-      const delBtn = p.id.startsWith('up-') ? `<span onclick="event.stopPropagation();SceneEngine.removeProduct('${p.id}')" style="margin-left:2px;font-size:14px;line-height:1;cursor:pointer;opacity:0.5;" title="删除">×</span>` : '';
+      var delBtn = p.id.startsWith('up-') ? '<span onclick="event.stopPropagation();SceneEngine.removeProduct(\'' + escHtml(p.id) + '\')" style="margin-left:2px;font-size:14px;line-height:1;cursor:pointer;opacity:0.5;" title="删除">×</span>' : '';
       var displayName = p.name.length > 6 ? p.name.slice(0,6) + '..' : p.name;
-      h += '<div class="chip pchip" style="background-image:url(' + p.image + ');background-size:cover;" onclick="SceneEngine.add(\'' + p.id + '\')" title="' + p.name + '">' + displayName + delBtn + '</div>';
+      h += '<div class="chip pchip" style="background-image:url(' + escHtml(p.image) + ');background-size:cover;" onclick="SceneEngine.add(\'' + escHtml(p.id) + '\')" title="' + escHtml(p.name) + '">' + escHtml(displayName) + delBtn + '</div>';
     });
     productChipsEl.innerHTML = h;
   }
@@ -84,8 +89,9 @@ const SceneEngine = (function() {
 
     const el = document.createElement('div');
     el.id = iid; el.className = 'product-item';
+    el.dataset.productId = product.id;
     el.style.cssText = `left:${inst.x}px;top:${inst.y}px;width:${inst.w}px;height:${inst.h}px;z-index:${instances.length};background-image:url(${product.image});transform:rotate(0deg);`;
-    el.innerHTML = `<span class="product-label">${product.name}</span><span class="scale-badge">100% | 0°</span>`;
+    el.innerHTML = '<span class="product-label">' + escHtml(product.name) + '</span><span class="scale-badge">100% | 0°</span>';
     el.addEventListener('pointerdown', onDown);
     sceneArea.appendChild(el);
 
@@ -262,14 +268,17 @@ const SceneEngine = (function() {
     sceneWrapper.addEventListener('touchmove', onTouchM, {passive:false});
     sceneWrapper.addEventListener('touchend', onTouchE);
     sceneArea.addEventListener('pointerdown', e => { if (e.target===sceneArea||e.target===sceneHint) select(null); });
-    document.addEventListener('keydown', e => {
-      if ((e.key==='Delete'||e.key==='Backspace') && document.activeElement===document.body) deleteSelected();
+    document.addEventListener('keydown', function(e) {
+      if ((e.key==='Delete'||e.key==='Backspace') && document.activeElement===document.body) SceneEngine.deleteSelected();
     });
   }
 
   return {
     init, switchScene, add, select, deleteSelected, clearAll,
     exportScreenshot, handleUpload, updateCount, removeProduct,
-    renderProducts, get cfg() { return cfg; }
+    renderProducts,
+    get _selectedId() { return selectedId; },
+    _getInstances: function() { return instances; },
+    get cfg() { return cfg; }
   };
 })();

@@ -12,11 +12,55 @@
 .upload-progress .status.success { color: #34d399; }
 .upload-progress .status.warn { color: #fbbf24; }
 .empty-state { grid-column: 1/-1; text-align: center; padding: 40px 20px; color: #555; }
+
+/* 分类筛选 */
+.cat-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.cat-chip { padding: 4px 12px; border-radius: 14px; border: 1px solid #333; font-size: 11px; color: #888; background: #1a1a2e; cursor: pointer; transition: all 0.2s; }
+.cat-chip:hover { border-color: #555; color: #ccc; }
+.cat-chip.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+
+/* 产品卡片增强 */
+.product-card { position: relative; }
+.product-card .cat-badge { display: inline-block; font-size: 10px; color: #a78bfa; background: rgba(124,58,237,0.15); padding: 1px 6px; border-radius: 4px; margin-bottom: 4px; }
+.product-card .price { font-size: 12px; color: #fbbf24; margin-top: 2px; }
+.product-card .drag-stat { font-size: 10px; color: #555; margin-top: 2px; }
+.product-card .card-actions { display: flex; gap: 4px; margin-top: 6px; justify-content: center; }
+.product-card .card-actions button { background: #222; color: #888; border: 1px solid #333; padding: 2px 8px; border-radius: 4px; font-size: 10px; cursor: pointer; }
+
+/* 设置面板 */
+.settings-panel { background: #13132a; border: 1px solid #222; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+.settings-panel h3 { font-size: 13px; color: #888; margin-bottom: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.settings-panel h3 .arrow { transition: transform 0.2s; font-size: 10px; }
+.settings-panel.collapsed .settings-body { display: none; }
+.settings-panel.collapsed h3 .arrow { transform: rotate(-90deg); }
+.settings-body { display: flex; flex-direction: column; gap: 12px; }
+.settings-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-row label { font-size: 12px; color: #888; min-width: 60px; }
+.settings-row input { padding: 6px 10px; background: #0a0a14; border: 1px solid #333; border-radius: 6px; color: #fff; font-size: 13px; }
+.settings-row input:focus { outline: none; border-color: #7c3aed; }
+.logo-preview { width: 60px; height: 60px; border: 1px dashed #333; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #0a0a14; cursor: pointer; }
+.logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.discount-row { display: flex; align-items: center; gap: 8px; }
+.discount-row input { width: 80px; }
+
+/* 编辑弹窗 */
+.edit-dialog { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.edit-dialog .card { background: #13132a; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 360px; width: 90%; }
+.edit-dialog h4 { margin-bottom: 16px; }
+.edit-dialog .field { margin-bottom: 12px; }
+.edit-dialog .field label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
+.edit-dialog .field input { width: 100%; padding: 8px 10px; background: #0a0a14; border: 1px solid #333; border-radius: 6px; color: #fff; font-size: 13px; }
+.edit-dialog .field input:focus { outline: none; border-color: #7c3aed; }
+
+/* 排序按钮 */
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.sort-btn { font-size: 11px; color: #888; background: none; border: 1px solid #333; padding: 4px 10px; border-radius: 14px; cursor: pointer; }
+.sort-btn.active { color: #a78bfa; border-color: #7c3aed; background: rgba(124,58,237,0.1); }
 </style>
 </head>
 <body style="display:block;overflow:auto;">
 <div class="topbar">
-  <span class="topbar-title">🏭 工厂管理后台</span>
+  <span class="topbar-title" id="topbarTitle">🏭 工厂管理后台</span>
   <span>
     <a href="preview.html" class="btn btn-primary" style="padding:4px 12px;font-size:11px;text-decoration:none;">📱 场景预览</a>
     <button id="btnLogout" class="btn btn-secondary" style="padding:4px 12px;font-size:11px;width:auto;flex:none;margin-left:6px;">退出</button>
@@ -24,39 +68,103 @@
 </div>
 
 <div class="dashboard">
-  <h2>产品管理</h2>
 
+  <!-- 工厂品牌设置 -->
+  <div class="settings-panel collapsed" id="settingsPanel">
+    <h3 onclick="toggleSettings()"><span class="arrow">▼</span> ⚙️ 工厂品牌设置</h3>
+    <div class="settings-body">
+      <div class="settings-row">
+        <label>工厂名称</label>
+        <input type="text" id="factoryName" placeholder="输入工厂名称" onchange="saveSettings()">
+      </div>
+      <div class="settings-row">
+        <label>工厂 LOGO</label>
+        <div class="logo-preview" id="logoPreview" onclick="document.getElementById('logoUpload').click()" title="点击上传 LOGO">
+          <span id="logoPlaceholder" style="font-size:24px;color:#555;">🏭</span>
+          <img id="logoImg" style="display:none;" alt="LOGO">
+        </div>
+        <span style="font-size:10px;color:#555;">建议宽300px以内</span>
+        <input type="file" id="logoUpload" accept="image/*" style="display:none" onchange="handleLogoUpload(event)">
+      </div>
+      <div class="settings-row">
+        <label>默认折扣</label>
+        <div class="discount-row">
+          <input type="number" id="defaultDiscount" min="1" max="10" step="0.1" value="10" onchange="saveSettings()" style="width:70px;">
+          <span style="font-size:12px;color:#888;">折（10=原价，8.5=八五折）</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <h2 style="margin:0;margin-right:auto;">产品管理</h2>
+    <button class="sort-btn" id="sortDefault" onclick="setSort('default')">默认排序</button>
+    <button class="sort-btn" id="sortHot" onclick="setSort('hot')">🔥 按热度</button>
+  </div>
+
+  <!-- 分类筛选 -->
+  <div class="cat-filter" id="catFilter">
+    <span class="cat-chip active" onclick="filterCategory('')">全部</span>
+  </div>
+
+  <!-- 上传区 -->
   <div class="upload-zone" id="uploadZone">
     <img src="langji-point.png" class="langji-dash" alt="上传">
     <div style="color:#ccc;">点击或拖拽上传产品照片</div>
     <input type="file" id="productUpload" accept="image/*" multiple style="display:none">
   </div>
 
-  <!-- 抠图选择弹窗 -->
-  <div id="cutoutDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
-    <div style="background:#13132a;border:1px solid #333;border-radius:12px;padding:24px;max-width:340px;width:90%;text-align:center;">
-      <div style="font-size:14px;color:#ccc;margin-bottom:4px;" id="dialogFileName"></div>
-      <div style="font-size:11px;color:#666;margin-bottom:16px;">上传方式</div>
-      <button class="btn btn-primary" onclick="chooseUpload('cutout')" style="width:100%;margin-bottom:8px;padding:12px;">✂️ AI抠图上传（去背景）</button>
-      <button class="btn btn-secondary" onclick="chooseUpload('direct')" style="width:100%;padding:12px;">📷 保留原图直接上传</button>
-      <div style="font-size:10px;color:#555;margin-top:8px;cursor:pointer;" onclick="cancelUpload()">取消</div>
+  <!-- 上传信息弹窗（分类+价格+抠图选择） -->
+  <div id="uploadDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+    <div style="background:#13132a;border:1px solid #333;border-radius:12px;padding:24px;max-width:360px;width:90%;">
+      <div style="font-size:14px;color:#ccc;margin-bottom:16px;" id="dialogFileName"></div>
+
+      <div class="field">
+        <label>产品分类</label>
+        <input type="text" id="dialogCategory" placeholder="如：游乐设施、攀爬架…" list="categoryList" autocomplete="off">
+        <datalist id="categoryList"></datalist>
+      </div>
+      <div class="field">
+        <label>产品价格（元，可不填）</label>
+        <input type="number" id="dialogPrice" placeholder="如：12800" min="0" step="1">
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="btn btn-primary" onclick="confirmUpload('cutout')" style="flex:1;padding:10px;">✂️ AI抠图上传</button>
+        <button class="btn btn-secondary" onclick="confirmUpload('direct')" style="flex:1;padding:10px;">📷 保留原图</button>
+      </div>
+      <div style="font-size:10px;color:#555;margin-top:8px;cursor:pointer;text-align:center;" onclick="cancelUpload()">取消</div>
     </div>
   </div>
 
-  <!-- Key 设置弹窗（首次使用） -->
-  <div id="keyDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:110;align-items:center;justify-content:center;">
-    <div style="background:#13132a;border:1px solid #333;border-radius:12px;padding:24px;max-width:380px;width:90%;text-align:center;">
-      <div style="font-size:16px;color:#fbbf24;margin-bottom:4px;">⚙️ 首次配置</div>
-      <div style="font-size:12px;color:#666;margin-bottom:16px;">AI抠图需要 remove.bg API Key<br>去 <b>remove.bg</b> 注册即可免费获取（每月50张）</div>
-      <input type="password" id="keyInput" placeholder="粘贴 remove.bg API Key" style="width:100%;padding:10px;background:#0a0a14;border:1px solid #333;border-radius:8px;color:#fff;font-size:13px;margin-bottom:12px;">
-      <button class="btn btn-primary" onclick="saveKey()" style="width:100%;padding:12px;">保存并开始使用</button>
-      <div style="font-size:10px;color:#555;margin-top:8px;">Key 只存在你的浏览器 localStorage 中<br>不会上传到任何服务器</div>
+  <!-- 产品编辑弹窗 -->
+  <div id="editDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+    <div class="card">
+      <h4>编辑产品</h4>
+      <div class="field">
+        <label>产品名称</label>
+        <input type="text" id="editName">
+      </div>
+      <div class="field">
+        <label>分类</label>
+        <input type="text" id="editCategory" list="categoryList" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>价格（元）</label>
+        <input type="number" id="editPrice" min="0" step="1">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="btn btn-primary" onclick="saveEdit()" style="flex:1;">保存</button>
+        <button class="btn btn-secondary" onclick="closeEdit()" style="flex:1;">取消</button>
+      </div>
     </div>
   </div>
 
+  <!-- 处理进度 -->
   <div id="processingList"></div>
 
-  <div class="product-grid" id="productGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">
+  <!-- 产品列表 -->
+  <div class="product-grid" id="productGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
     <div class="empty-state">
       <img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹">
       <div>还没有产品，上传第一张照片开始</div>
@@ -68,61 +176,304 @@
 <script src="js/effects.js"></script>
 <script>
 // ===== 登录校验 =====
-if (!localStorage.getItem('langji_auth')) { location.href = 'login.html'; }
+var AUTH_TOKEN = localStorage.getItem('langji_token');
+if (!AUTH_TOKEN) { location.href = 'login.html'; }
 
-// API Key 只从 localStorage 读取，源代码零硬编码
+function authHeaders() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN };
+}
+
+// HTML 转义，防御 XSS
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 window.REMOVEBG_API_KEY = localStorage.getItem('LANJI_RMBG_KEY') || '';
 
-const CACHE_KEY = 'langji_cutout_cache';
-const API = '/api/products';
+var CACHE_KEY = 'langji_cutout_cache';
+var API = '/api/products';
+var SETTINGS_API = '/api/settings';
 
-// ===== 存储：Cloudflare KV，逐张加载避免一次拉太多 ====
+// ===== 全局状态 =====
+var allProducts = [];
+var currentSort = 'default';
+var currentCategory = '';
+var factorySettings = { logo: '', factoryName: '', discount: 10 };
+
+// ===== 工厂设置 =====
+async function loadSettings() {
+  try {
+    var resp = await fetch(SETTINGS_API);
+    if (resp.ok) { factorySettings = await resp.json(); }
+  } catch(e) { console.error('加载设置失败:', e); }
+  applySettings();
+}
+function applySettings() {
+  // 顶部显示工厂名
+  if (factorySettings.factoryName) {
+    document.getElementById('topbarTitle').textContent = '🏭 ' + factorySettings.factoryName;
+  }
+  // LOGO
+  var logoImg = document.getElementById('logoImg');
+  var placeholder = document.getElementById('logoPlaceholder');
+  if (factorySettings.logo) {
+    logoImg.src = factorySettings.logo;
+    logoImg.style.display = 'block';
+    placeholder.style.display = 'none';
+  } else {
+    logoImg.style.display = 'none';
+    placeholder.style.display = '';
+  }
+  // 折扣
+  if (factorySettings.discount) {
+    document.getElementById('defaultDiscount').value = factorySettings.discount;
+  }
+}
+async function saveSettings() {
+  factorySettings.factoryName = document.getElementById('factoryName').value.trim();
+  var d = parseFloat(document.getElementById('defaultDiscount').value);
+  factorySettings.discount = isNaN(d) || d <= 0 ? 1 : d;
+  try {
+    var resp = await fetch(SETTINGS_API, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(factorySettings),
+    });
+    if (resp.ok) { factorySettings = await resp.json(); applySettings(); }
+  } catch(e) { console.error('保存设置失败:', e); }
+}
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('collapsed');
+}
+async function handleLogoUpload(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  // 压缩 LOGO 到宽 300px
+  var compressed = await compressLogo(file);
+  factorySettings.logo = compressed;
+  await fetch(SETTINGS_API, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ logo: compressed }),
+  });
+  applySettings();
+  e.target.value = '';
+}
+function compressLogo(file) {
+  return new Promise(function(resolve) {
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function() {
+      URL.revokeObjectURL(url);
+      var maxW = 300;
+      var w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.src = url;
+  });
+}
+
+// ===== 产品加载 =====
 async function loadProducts() {
   try {
     var resp = await fetch(API);
     if (!resp.ok) throw new Error('API error');
     var list = await resp.json();
     // 后台逐张取图
-    var prods = [];
+    allProducts = list.map(function(m) {
+      return { id: m.id, name: m.name, cutout: m.cutout, time: m.time, image: '',
+               category: m.category || '', price: m.price || 0, dragCount: m.dragCount || 0,
+               updatedAt: m.updatedAt || m.time || 0 };
+    });
+    // 异步加载图片
     for (var i = 0; i < list.length; i++) {
-      var m = list[i];
-      prods.push({ id: m.id, name: m.name, cutout: m.cutout, time: m.time, image: '' });
-      // 异步加载图片
       (function(idx, pid) {
         fetch(API + '?id=' + pid).then(function(r){ return r.json(); }).then(function(full) {
-          if (prods[idx]) { prods[idx].image = full.image || ''; renderGridFromCache(prods); }
+          if (allProducts[idx] && full.image) { allProducts[idx].image = full.image; renderGrid(); }
         }).catch(function(){});
-      })(i, m.id);
+      })(i, list[i].id);
     }
-    return prods;
+    renderGrid();
+    return allProducts;
   } catch(e) { console.error('加载失败:', e); return []; }
 }
 
-function renderGridFromCache(products) {
+// ===== 排序 & 筛选 =====
+function setSort(mode) {
+  currentSort = mode;
+  document.getElementById('sortDefault').classList.toggle('active', mode === 'default');
+  document.getElementById('sortHot').classList.toggle('active', mode === 'hot');
+  renderGrid();
+}
+function filterCategory(cat) {
+  currentCategory = cat;
+  renderCatFilter();
+  renderGrid();
+}
+function getFilteredProducts() {
+  var list = allProducts.slice();
+  // 筛选
+  if (currentCategory) {
+    list = list.filter(function(p) { return (p.category || '') === currentCategory; });
+  }
+  // 排序
+  if (currentSort === 'hot') {
+    list.sort(function(a, b) { return (b.dragCount || 0) - (a.dragCount || 0); });
+  } else {
+    list.sort(function(a, b) { return (b.time || 0) - (a.time || 0); });
+  }
+  return list;
+}
+
+// ===== 分类筛选栏 =====
+function renderCatFilter() {
+  var cats = {};
+  allProducts.forEach(function(p) {
+    var c = (p.category || '').trim();
+    if (c) cats[c] = true;
+  });
+  var html = '<span class="cat-chip' + (currentCategory === '' ? ' active' : '') + '" onclick="filterCategory(\'\')">全部</span>';
+  Object.keys(cats).sort().forEach(function(c) {
+    html += '<span class="cat-chip' + (currentCategory === c ? ' active' : '') + '" onclick="filterCategory(\'' + escHtml(c).replace(/'/g, "\\'") + '\')">' + escHtml(c) + '</span>';
+  });
+  document.getElementById('catFilter').innerHTML = html || '<span class="cat-chip active" onclick="filterCategory(\'\')">全部</span>';
+
+  // 更新 datalist
+  var dl = document.getElementById('categoryList');
+  dl.innerHTML = Object.keys(cats).map(function(c) { return '<option value="' + escHtml(c) + '">'; }).join('');
+}
+
+// ===== 渲染产品列表 =====
+function renderGrid() {
   var grid = document.getElementById('productGrid');
+  var products = getFilteredProducts();
   if (!products.length) {
-    grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>还没有产品，上传第一张照片开始</div></div>';
+    grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>' + (allProducts.length ? '没有匹配该分类的产品' : '还没有产品，上传第一张照片开始') + '</div></div>';
     return;
   }
   grid.innerHTML = products.map(function(p) {
+    var catHtml = p.category ? '<span class="cat-badge">' + escHtml(p.category) + '</span>' : '';
+    var priceHtml = p.price > 0 ? '<div class="price">¥' + formatPrice(p.price) + '</div>' : '<div class="price" style="color:#666;">询价</div>';
+    var statHtml = p.dragCount > 0 ? '<div class="drag-stat">📊 展示 ' + escHtml(String(p.dragCount)) + ' 次</div>' : '';
     return '<div class="product-card">'
-      + '<img src="' + (p.image || '') + '" alt="' + p.name + '" loading="lazy" style="width:100%;height:100px;object-fit:contain;border-radius:4px;">'
-      + '<div class="name">' + p.name + (p.cutout ? ' ✂' : '') + '</div>'
-      + '<div style="margin-top:4px;"><button onclick="confirmDelete(\'' + p.id + '\')" style="background:#3a1520;color:#f87171;border:none;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">删除</button></div>'
-      + '</div>';
+      + '<img src="' + escHtml(p.image || '') + '" alt="' + escHtml(p.name) + '" loading="lazy" style="width:100%;height:100px;object-fit:contain;border-radius:4px;">'
+      + catHtml
+      + '<div class="name" title="' + escHtml(p.name) + '">' + escHtml(p.name.length > 8 ? p.name.slice(0,8) + '..' : p.name) + (p.cutout ? ' ✂' : '') + '</div>'
+      + priceHtml + statHtml
+      + '<div class="card-actions">'
+      + '<button onclick="openEdit(\'' + p.id + '\')">✏️ 编辑</button>'
+      + '<button onclick="confirmDelete(\'' + p.id + '\')" style="color:#f87171;">删除</button>'
+      + '</div></div>';
   }).join('');
 }
 
+function formatPrice(n) {
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// ===== 上传弹窗 =====
+var pendingFiles = [];
+var pendingIndex = 0;
+
+document.getElementById('productUpload').addEventListener('change', function(e) {
+  pendingFiles = Array.from(e.target.files);
+  pendingIndex = 0;
+  if (pendingFiles.length) showUploadDialog(pendingFiles[0]);
+});
+
+function showUploadDialog(file) {
+  document.getElementById('dialogFileName').textContent = '📄 ' + file.name;
+  document.getElementById('dialogCategory').value = '';
+  document.getElementById('dialogPrice').value = '';
+  document.getElementById('uploadDialog').style.display = 'flex';
+}
+function cancelUpload() {
+  document.getElementById('uploadDialog').style.display = 'none';
+  pendingFiles = []; document.getElementById('productUpload').value = '';
+}
+function confirmUpload(mode) {
+  var cat = document.getElementById('dialogCategory').value.trim();
+  var price = parseInt(document.getElementById('dialogPrice').value) || 0;
+  document.getElementById('uploadDialog').style.display = 'none';
+  processFile(pendingFiles[pendingIndex], mode, cat, price);
+}
+
+// ===== 上传处理 =====
+async function processFile(file, mode, category, price) {
+  var list = document.getElementById('processingList');
+  var itemId = 'p-' + Date.now();
+  var useCutout = (mode === 'cutout');
+
+  list.innerHTML += '<div class="upload-progress" id="' + itemId + '">'
+    + '<span class="file-name">' + file.name + '</span>'
+    + '<span class="status">' + (useCutout ? '⏳ 抠图中...' : '📷 原图上传中...') + '</span></div>';
+  var item = document.getElementById(itemId);
+  var st = item.querySelector('.status');
+  var method = 'direct';
+
+  if (useCutout) {
+    try {
+      var cachedB64 = getCachedCutout(file.name);
+      var blob;
+      if (cachedB64) {
+        blob = base64ToBlob(cachedB64);
+        method = 'cached';
+      } else {
+        blob = await Cutout.processFile(file, function(s) { method = s; });
+        if (method === 'api_proxy' || method === 'api_removebg' || method === 'api_ali') {
+          setCachedCutout(file.name, await blobToBase64(blob));
+        }
+      }
+      await addProduct(file.name.replace(/\.[^.]+$/, ''), blob, true, category, price);
+      var msgs = { api_proxy: '✅ AI抠图完成（云端）', cached: '✅ 使用缓存', api_removebg: '✅ AI抠图完成', api_ali: '✅ 阿里云抠图', local: '⚠️ 离线去底（云端不可用）', fallback: '⚠️ 全部失败，用原图' };
+      st.textContent = msgs[method] || '✅';
+      st.className = 'status ' + (method === 'fallback' || method === 'local' ? 'warn' : 'success');
+    } catch(err) {
+      console.error('抠图异常:', err);
+      st.textContent = '❌ ' + (err.message || '未知错误');
+      st.className = 'status warn';
+      await addProduct(file.name.replace(/\.[^.]+$/, ''), file, false, category, price);
+    }
+  } else {
+    await addProduct(file.name.replace(/\.[^.]+$/, ''), file, false, category, price);
+    st.textContent = '✅ 原图上传';
+    st.className = 'status success';
+  }
+
+  setTimeout(function() { if (item) item.remove(); }, 3000);
+
+  pendingIndex++;
+  if (pendingIndex < pendingFiles.length) {
+    showUploadDialog(pendingFiles[pendingIndex]);
+  } else {
+    document.getElementById('productUpload').value = '';
+  }
+}
+
 function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result); };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
 }
 
-// 压缩图片：250px + WebP，抠图透明，普通图小体积
+function base64ToBlob(b64) {
+  var parts = b64.split(',');
+  var mime = parts[0].match(/:(.*?);/)[1];
+  var bytes = atob(parts[1]);
+  var arr = new Uint8Array(bytes.length);
+  for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
 function compressBlob(blob, isCutout) {
   return new Promise(function(resolve) {
     var img = new Image();
@@ -139,170 +490,95 @@ function compressBlob(blob, isCutout) {
       c.width = w; c.height = h;
       var ctx = c.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      // WebP 支持透明，体积比 PNG 小 3-5 倍
       c.toBlob(function(b) { resolve(b); }, 'image/webp', 0.75);
     };
     img.src = url;
   });
 }
 
-function base64ToBlob(b64) {
-  const parts = b64.split(',');
-  const mime = parts[0].match(/:(.*?);/)[1];
-  const bytes = atob(parts[1]);
-  const arr = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-  return new Blob([arr], { type: mime });
-}
-
 function getCachedCutout(fileName) {
-  try { const cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; return cache[fileName] || null; } catch(e) { return null; }
+  try { var cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; return cache[fileName] || null; } catch(e) { return null; }
 }
 function setCachedCutout(fileName, base64) {
   try {
-    const cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+    var cache = JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
     cache[fileName] = base64;
-    const keys = Object.keys(cache);
+    var keys = Object.keys(cache);
     if (keys.length > 20) delete cache[keys[0]];
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch(e) {}
 }
 
-async function renderGrid() {
-  var grid = document.getElementById('productGrid');
-  grid.innerHTML = '<div class="empty-state"><img src="langji-wave.png" style="width:100px;opacity:0.5;margin-bottom:8px;" alt="朗迹"><div>加载中...</div></div>';
-  var products = await loadProducts();
-  renderGridFromCache(products);
-}
-
-async function confirmDelete(pid) {
-  if (!confirm('确定删除？')) return;
-  await fetch(API + '?id=' + pid, { method: 'DELETE' });
-  renderGrid();
-}
-
-async function addProduct(name, blob, cutout) {
-  // 压缩后再上传，抠图保留透明
+async function addProduct(name, blob, cutout, category, price) {
   var compressed = await compressBlob(blob, cutout);
   var base64 = await blobToBase64(compressed);
   var resp = await fetch(API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, cutout, image: base64 }),
+    headers: authHeaders(),
+    body: JSON.stringify({ name: name, cutout: cutout, image: base64, category: category, price: price }),
   });
-  const data = await resp.json();
+  var data = await resp.json();
   if (!data.ok) throw new Error('API error');
-  renderGrid();
+  await loadProducts();
   return data.id;
 }
 
-// ===== 上传交互 =====
-const uploadZone = document.getElementById('uploadZone');
-const fileInput = document.getElementById('productUpload');
-uploadZone.addEventListener('click', () => fileInput.click());
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-uploadZone.addEventListener('drop', e => {
+async function confirmDelete(pid) {
+  if (!confirm('确定删除？')) return;
+  await fetch(API + '?id=' + pid, { method: 'DELETE', headers: authHeaders() });
+  loadProducts();
+}
+
+// ===== 产品编辑 =====
+var editingId = null;
+function openEdit(pid) {
+  var p = allProducts.find(function(x) { return x.id === pid; });
+  if (!p) return;
+  editingId = pid;
+  document.getElementById('editName').value = p.name;
+  document.getElementById('editCategory').value = p.category || '';
+  document.getElementById('editPrice').value = p.price || '';
+  document.getElementById('editDialog').style.display = 'flex';
+}
+function closeEdit() {
+  editingId = null;
+  document.getElementById('editDialog').style.display = 'none';
+}
+async function saveEdit() {
+  if (!editingId) return;
+  var name = document.getElementById('editName').value.trim();
+  var category = document.getElementById('editCategory').value.trim();
+  var price = parseInt(document.getElementById('editPrice').value) || 0;
+  if (!name) { alert('产品名不能为空'); return; }
+  await fetch(API, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ id: editingId, name: name, category: category, price: price }),
+  });
+  closeEdit();
+  loadProducts();
+}
+
+// ===== 拖拽上传 =====
+var uploadZone = document.getElementById('uploadZone');
+var fileInput = document.getElementById('productUpload');
+uploadZone.addEventListener('click', function() { fileInput.click(); });
+uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', function() { uploadZone.classList.remove('dragover'); });
+uploadZone.addEventListener('drop', function(e) {
   e.preventDefault(); uploadZone.classList.remove('dragover');
   if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
 });
 
-// 抠图走云端代理，不需要本地额度
-
-// ===== 上传流程 =====
-let pendingFiles = [];
-let pendingIndex = 0;
-
-fileInput.addEventListener('change', e => {
-  pendingFiles = Array.from(e.target.files);
-  pendingIndex = 0;
-  if (pendingFiles.length) showCutoutDialog(pendingFiles[0]);
-});
-
-function showCutoutDialog(file) {
-  document.getElementById('dialogFileName').textContent = file.name;
-  document.getElementById('cutoutDialog').style.display = 'flex';
-}
-function cancelUpload() {
-  document.getElementById('cutoutDialog').style.display = 'none';
-  pendingFiles = []; fileInput.value = '';
-}
-function chooseUpload(mode) {
-  document.getElementById('cutoutDialog').style.display = 'none';
-  processFile(pendingFiles[pendingIndex], mode);
-}
-
-async function processFile(file, mode) {
-  const list = document.getElementById('processingList');
-  const itemId = 'p-' + Date.now();
-  const useCutout = (mode === 'cutout');
-
-  list.innerHTML += '<div class="upload-progress" id="' + itemId + '">'
-    + '<span class="file-name">' + file.name + '</span>'
-    + '<span class="status">' + (useCutout ? '⏳ 抠图中...' : '📷 原图上传中...') + '</span></div>';
-  const item = document.getElementById(itemId);
-  const st = item.querySelector('.status');
-  let method = 'direct';
-
-  if (useCutout) {
-    try {
-      const cachedB64 = getCachedCutout(file.name);
-      let blob;
-      if (cachedB64) {
-        blob = base64ToBlob(cachedB64);
-        method = 'cached';
-      } else {
-        blob = await Cutout.processFile(file, s => { method = s; });
-        if (method === 'api_removebg' || method === 'api_ali') {
-          const b64 = await blobToBase64(blob);
-          setCachedCutout(file.name, b64);
-        }
-      }
-      await addProduct(file.name.replace(/\.[^.]+$/, ''), blob, true);
-      const msgs = { api_proxy: '✅ AI抠图完成（云端）', cached: '✅ 使用缓存', api_removebg: '✅ AI抠图完成', api_ali: '✅ 阿里云抠图', local: '⚠️ 离线去底（云端不可用）', fallback: '⚠️ 全部失败，用原图' };
-      st.textContent = msgs[method] || '✅';
-      st.className = 'status ' + (method === 'fallback' || method === 'local' ? 'warn' : 'success');
-    } catch(err) {
-      console.error('抠图异常:', err);
-      st.textContent = '❌ 抠图失败: ' + (err.message || '未知错误');
-      st.className = 'status warn';
-      await addProduct(file.name.replace(/\.[^.]+$/, ''), file, false);
-    }
-  } else {
-    await addProduct(file.name.replace(/\.[^.]+$/, ''), file, false);
-    st.textContent = '✅ 原图上传';
-    st.className = 'status success';
-  }
-
-  setTimeout(() => { if (item) item.remove(); }, 3000);
-
-  pendingIndex++;
-  if (pendingIndex < pendingFiles.length) {
-    showCutoutDialog(pendingFiles[pendingIndex]);
-  } else {
-    fileInput.value = '';
-  }
-}
-
-// ===== Key 设置 =====
-function saveKey() {
-  var val = document.getElementById('keyInput').value.trim();
-  if (!val) return alert('请粘贴 remove.bg API Key');
-  localStorage.setItem('LANJI_RMBG_KEY', val);
-  window.REMOVEBG_API_KEY = val;
-  document.getElementById('keyDialog').style.display = 'none';
-  alert('Key 已保存！现在可以上传产品了。');
-}
-// 代理优先，不需要客户端 Key。如需直连 remove.bg 可手动设置
-// if (!localStorage.getItem('LANJI_RMBG_KEY')) { document.getElementById('keyDialog').style.display = 'flex'; }
-
 // ===== 退出登录 =====
 document.getElementById('btnLogout').addEventListener('click', function() {
   localStorage.removeItem('langji_auth');
+  localStorage.removeItem('langji_token');
   location.href = 'login.html';
 });
 
-renderGrid();
+// ===== 启动 =====
+loadSettings().then(function() { return loadProducts(); });
 </script>
 </body>
 </html>

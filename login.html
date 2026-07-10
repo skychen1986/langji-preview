@@ -32,23 +32,37 @@
 
 <script>
 // 已登录直接跳转
-if (localStorage.getItem('langji_auth')) { location.href = 'dashboard.html'; }
+if (localStorage.getItem('langji_token')) { location.href = 'dashboard.html'; }
 
-function doLogin() {
+async function doLogin() {
   var u = document.getElementById('username').value.trim();
   var p = document.getElementById('password').value;
   var err = document.getElementById('loginError');
 
   if (!u || !p) { err.textContent = '请输入账号和密码'; err.style.display = 'block'; return false; }
 
-  if (u === 'admin' && p === '12345') {
+  // 账号本地校验 + 密码走服务端鉴权
+  if (u !== 'admin') { err.textContent = '账号或密码错误'; err.style.display = 'block'; return false; }
+
+  try {
+    var resp = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: p }),
+    });
+    var data = await resp.json();
+    if (!resp.ok || !data.token) {
+      err.textContent = '密码错误';
+      err.style.display = 'block';
+      return false;
+    }
+    localStorage.setItem('langji_token', data.token);
     localStorage.setItem('langji_auth', Date.now().toString());
     location.href = 'dashboard.html';
-    return false;
+  } catch(e) {
+    err.textContent = '网络错误，请重试';
+    err.style.display = 'block';
   }
-
-  err.textContent = '账号或密码错误';
-  err.style.display = 'block';
   return false;
 }
 </script>
